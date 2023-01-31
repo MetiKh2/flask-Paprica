@@ -45,15 +45,21 @@ def token_required(f):
 @app.route('/api/register', methods=['POST'])
 @cross_origin()
 def signup_user():
+   try:
     data = request.get_json()
-    print(data)
+    if not data['password']or not data['username']or not data['email']:
+        raise ValueError('Values are null')
     hashed_password = generate_password_hash(data['password'], method='sha256')
-
+    print(data['password'])
     new_user = User.Users(public_id=str(uuid.uuid4(
-    )), username=data['username'], email=data['email'], password=hashed_password)
+    )), username=data['username'], email=data['email'],image=data['image'], password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
     return jsonify({'message': 'registered successfully'})
+   except Exception as e: 
+    return jsonify({
+        'message':'registered unsuccessfully'
+    },501)
 
 
 @app.route('/api/login', methods=['POST'])
@@ -71,6 +77,7 @@ def login_user():
 
         return jsonify({'token': token})
 
+    print('ss')
     return make_response('could not verify',  401, {'Authentication': '"login required"'})
 
 
@@ -106,7 +113,7 @@ def posts():
         'title': post.title,
         'user': post.get_user(),
         'views': post.views,
-        'likes': post.likes,
+        'likes': post.get_favorites(),
         'image': post.image,
         'raw_material': post.raw_material,
         'prepare': post.prepare,
@@ -161,6 +168,17 @@ def add_favorite(current_user):
     return jsonify({
         'message': 'favorite added successfully'
     })
+@app.route('/api/remove_favorite', methods=['POST'])
+@cross_origin()
+@token_required
+def remove_favorite(current_user):
+    data = request.get_json()
+    last = db.session.query(UserFavorite.UserFavorites).filter(and_(UserFavorite.UserFavorites.user_id ==
+                                                                    current_user.id, UserFavorite.UserFavorites.post_id == int(data['post_id']))).delete()
+    db.session.commit()
+    return jsonify({
+        'message': 'favorite removed successfully'
+    })
 
 
 @app.route('/api/favorites', methods=['GET'])
@@ -179,7 +197,7 @@ def favorites(current_user):
             'title': post.title,
             'user': post.get_user(),
             'views': post.views,
-            'likes': post.likes,
+            'likes': post.get_favorites(),
             'image': post.image,
             'raw_material': post.raw_material,
             'prepare': post.prepare,
@@ -217,7 +235,7 @@ def profile(current_user):
             'title': post.title,
             'user': post.get_user(),
             'views': post.views,
-            'likes': post.likes,
+            'likes': post.get_favorites(),
             'image': post.image,
             'raw_material': post.raw_material,
             'prepare': post.prepare,
@@ -248,6 +266,7 @@ def comments(post_id):
     return jsonify([{
         'text': comment.text,
         'username': comment.get_username(),
+        'image': comment.get_userimage(),
     }for comment in comments])
 
 
@@ -259,7 +278,7 @@ def commentsByUser(current_user):
         and_(Comment.Comments.is_block == False, Comment.Comments.user_id == current_user.id)).all()
     return jsonify([{
         'text': comment.text,
-        'username': comment.get_username(),
+        'post_title': comment.get_post_title(),
     }for comment in comments])
 
 
@@ -268,15 +287,25 @@ def commentsByUser(current_user):
 def post(post_id):
     post = db.session.query(Post.Posts).filter(
         and_(Post.Posts.is_block == False, Post.Posts.id == post_id)).first()
+    if(post.views):
+        post.views=post.views+1
+    else:
+        post.views=1
+    db.session.add(post)
+    db.session.commit()
     return jsonify({
         'prepare': post.prepare,
         'raw_material': post.raw_material,
         'title': post.title,
         'image': post.image,
         'id': post.id,
-        'likes': post.likes,
+        'likes': post.get_favorites(),
         'views': post.views,
         'category': post.get_category(),
+        'user':{
+            'username':post.get_user(),
+            'image':post.get_user_image(),
+        }
     })
 
 
@@ -291,6 +320,7 @@ def add_post(current_user):
     return jsonify({
         'message': 'post added successfully'
     })
+
 
 
 if __name__ == '__main__':
