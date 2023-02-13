@@ -29,14 +29,14 @@ def token_required(f):
         if 'x-access-tokens' in request.headers:
             token = request.headers['x-access-tokens']
         if not token:
-            return jsonify({'message': 'a valid token is missing'})
+            return jsonify({'message': 'a valid token is missing'}),401
         try:
             data = jwt.decode(
                 token, app.config['SECRET_KEY'], algorithms=["HS256"])
             current_user = User.Users.query.filter_by(
                 public_id=data['public_id']).first()
         except:
-            return jsonify({'message': 'token is invalid'})
+            return jsonify({'message': 'token is invalid'}),401
 
         return f(current_user, *args, **kwargs)
     return decorator
@@ -95,19 +95,22 @@ def test():
 def posts():
     order_by = request.args.get('order_by')
     count = int(request.args.get('count'))
-    print(count)
+    category = int(request.args.get('category')or 0)
+    query = str(request.args.get('query')or '')
     if order_by == 'newest':
         posts = db.session.query(Post.Posts).filter(
-            Post.Posts.is_block == False).order_by(desc(Post.Posts.created_at)).limit(count).all()
+            and_(Post.Posts.is_block == False,Post.Posts.title.contains(query))).order_by(desc(Post.Posts.created_at)).limit(count).all()
     elif order_by == 'most_view':
         posts = db.session.query(Post.Posts).filter(
-            Post.Posts.is_block == False).order_by(desc(Post.Posts.views)).limit(count).all()
+           and_(Post.Posts.is_block == False,Post.Posts.title.contains(query))).order_by(desc(Post.Posts.views)).limit(count).all()
     elif order_by == 'most_like':
         posts = db.session.query(Post.Posts).filter(
-            Post.Posts.is_block == False).order_by(desc(Post.Posts.likes)).limit(count).all()
+           and_(Post.Posts.is_block == False,Post.Posts.title.contains(query))).order_by(desc(Post.Posts.likes)).limit(count).all()
     else:
         posts = db.session.query(Post.Posts).filter(
-            Post.Posts.is_block == False).limit(count).all()
+           and_(Post.Posts.is_block == False,Post.Posts.title.contains(query))).limit(count).all()
+    if category and category>0:
+        posts=filter(lambda post:post.category_id==category,posts)
     return jsonify([{
         'id': post.id,
         'title': post.title,
@@ -218,6 +221,7 @@ def categories():
     return jsonify([{
         'title': category.title,
         'image': category.image,
+        'id': category.id,
     }for category in categories_list])
 
 
